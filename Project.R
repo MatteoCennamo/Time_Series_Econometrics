@@ -4,6 +4,11 @@ load("~/R/Time_Seties_Econometrics/DataForPresentation2021_timeseries.RData")
 View(StockReturns)
 StockReturns[, 1] <- as.Date(StockReturns[, 1], format = "%d/%m/%Y")
 
+#Starting from 02/01/1991
+Stock1991 <- StockReturns[StockReturns$Date > as.Date("1990-12-31"), ]
+
+
+
 
 ggplot(data = StockReturns, aes(x = Date, y = SP500)) +
   geom_line() +
