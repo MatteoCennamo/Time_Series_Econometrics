@@ -6,7 +6,7 @@ StockReturns[, 1] <- as.Date(StockReturns[, 1], format = "%d/%m/%Y")
 
 
 ggplot(data = StockReturns, aes(x = Date, y = SP500)) +
-  geom_point() +
+  geom_line() +
   labs(x = "Date",
        y = "SP500",
        title = "Returns",
