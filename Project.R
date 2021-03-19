@@ -1,10 +1,12 @@
 library(ggplot2)
-library(gridExtra)
+library(gridExtra) # multiple plots
+library(cowplot)   # multiple plots vertically aligned
 library(MSGARCH)
 
 load("~/R/Time_Seties_Econometrics/DataForPresentation2021_timeseries.RData")
 View(StockReturns)
 StockReturns[, 1] <- as.Date(StockReturns[, 1], format = "%d/%m/%Y")
+N <- length(StockReturns[, 1])
 
 # Multiple plot of the returns
 cnames <- colnames(StockReturns)
@@ -72,13 +74,22 @@ summary(model)
 # BIC: 16830.2805 -> Bayesian information criterion
 
 smooth.prob <- State(model)$SmoothProb[, 1, 2, drop = TRUE]
-ggplot(StockReturns, aes(x = Date)) + 
+pStates <- ggplot(StockReturns, aes(x = Date)) + 
   geom_line(aes(y = data), color = 'black', size = 0.4) + 
   geom_line(aes(y = smooth.prob[-1] * 10), color = 'red', size = 0.9) + 
   theme_minimal() + 
-  scale_x_date(date_minor_breaks = '1 year') + 
+  scale_x_date(date_minor_breaks = '1 year', name = '') + 
   scale_y_continuous(name = 'Returns', 
-                     sec.axis = sec_axis(~./10, name = 'State'))
+                     sec.axis = sec_axis(~./10, name = 'State')) + 
+  labs(title = cnames[2])
+pVol <- ggplot(StockReturns, aes(x = Date)) + 
+  geom_line(aes(y = Volatility(model)), color = 'black', size = 0.4) + 
+  geom_abline(intercept = 0, slope = 0, color = 'gray', size = 0.1) + 
+  theme_minimal() + 
+  scale_x_date(date_minor_breaks = '1 year') + 
+  scale_y_continuous(limits = c(0, NA)) + 
+  labs(y = 'Conditional Volatilities')
+do.call(plot_grid, c(list(pStates, pVol), nrow = 2, align = 'v'))
 
 # 3) FORECASTING
 # We can forcas: (i) shape of the distribution of yT+h|IT, (ii) volatility.
@@ -99,6 +110,62 @@ pred <- predict(model,
 # Predicted volatility for the next 30 days:
 print(pred$vol)
 
+# Creates two scenarios
+statesFit <- ExtractStateFit(model)
+pred1 <- predict(statesFit[[1]], nahead = predicted_days)
+pred2 <- predict(statesFit[[2]], nahead = predicted_days)
+newdate <- c(StockReturns[seq(N-60, N), 1], seq(StockReturns[N, 1], 
+                    StockReturns[N, 1] + predicted_days - 1, by = 'days'))
+ggplot() + 
+  geom_line(aes(x = newdate, 
+                y = c(Volatility(model)[seq(N-60, N)], rep(NA, predicted_days)), 
+                color = 'Cond. Vol.'), 
+            size = 0.6) + 
+  geom_line(aes(x = newdate, 
+                y = c(rep(NA, 60), Volatility(model)[N], as.numeric(pred1$vol)), 
+                colour = 'State 1'), 
+            size = 1.2) + 
+  geom_line(aes(x = newdate, 
+                y = c(rep(NA, 60), Volatility(model)[N], as.numeric(pred2$vol)), 
+                colour = 'State 2'), 
+            size = 1.2) + 
+  theme_minimal() + 
+  scale_x_date(date_minor_breaks = '1 month') + 
+  scale_y_continuous(limits = c(0, NA)) + 
+  scale_color_manual(values = c('Cond. Vol.' = 'black', 
+                                'State 1' = 'blue', 
+                                'State 2' = 'red')) + 
+  labs(title = paste('Scenarios -', cnames[2]), 
+       subtitle = paste('next', predicted_days, 'days'), 
+       y = 'Volatility', 
+       x = 'Date', 
+       color = 'Regimes')
 
-# 4) IVE RISK MANAGEMENT
 
+# 4) QUANTITATIVE RISK MANAGEMENT
+# Extract single-regime model results from the fitted object
+statesFit <- ExtractStateFit(model)
+# Value at Risck (VaR) of state 1
+risk1 <- Risk(statesFit[[1]],        # fitted object
+              alpha = c(0.01, 0.05), # risk levels
+              do.es = T,             # compute the expected-shortfall (default = T)
+              ctr = list(            # control parameters
+                nsim = 1e4L          # number of simulation done for estimation (default = 1e4L)
+              ), 
+              nahead = 5)            # forecast horizon
+# Value at Risck (VaR) of state 2
+risk2 <- Risk(statesFit[[2]], alpha = c(0.01, 0.05), nahead = 5)
+# Combine the two states
+VaR <- cbind(risk1$VaR, risk2$VaR)
+colnames(VaR) <- c("State 1 (alpha=0.01)", "State 1 (alpha=0.05)", 
+                   "State 2 (alpha=0.01)", "State 2 (alpha=0.05)")
+VaR
+# Hence, we are able to evaluate the risk exposure of an investment conditionally 
+# on different regimes of the market -> create scenarios (using predict) in different 
+# regimes.
+
+# Compute expected-shortfall (ES) -> expected value below VaR
+ES <- cbind(risk1$ES, risk2$ES)
+colnames(ES) <- c("State 1 (alpha=0.01)", "State 1 (alpha=0.05)", 
+                  "State 2 (alpha=0.01)", "State 2 (alpha=0.05)")
+ES
