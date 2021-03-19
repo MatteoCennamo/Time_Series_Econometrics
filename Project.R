@@ -37,6 +37,7 @@ do.call(grid.arrange, c(plotList, nrow = 2))
 # 2) FitML      -> Fit the model by maximum likelihood
 # 3) predict    -> Compute the conditional volatility forecasts and the density forecasts
 # 4) Risk       -> Compute the value-at-risk and expected-shortfall risk measures
+# 5) PredPdf    -> Predict distribution
 
 # 1) MODEL SPECIFICATION
 # Specifies 2 states:
@@ -54,6 +55,7 @@ summary(spec)
 
 # 2) MODEL ESTIMATION
 # Using maximum likelihood:
+set.seed(123)
 data <- StockReturns[, 2]
 model <- FitML(spec, data,     # specifications and data
                ctr = list(     # control parameters (different from FitMCMC())
@@ -169,3 +171,48 @@ ES <- cbind(risk1$ES, risk2$ES)
 colnames(ES) <- c("State 1 (alpha=0.01)", "State 1 (alpha=0.05)", 
                   "State 2 (alpha=0.01)", "State 2 (alpha=0.05)")
 ES
+
+
+# 5) PREDICT DISTRIBUTION
+# run PredPdf method in-sample
+mesh <- seq(-2, 2, 0.01)
+pred.x <- PredPdf(object = model,  # fitted object
+                  x = mesh,        # Used when do.its = FALSE (mesh grid where perform simulations)
+                  do.its = F,      # if the in-sample predictive is returned (used if 'nahead' > 1)
+                  log = F,         # if the log-density is returned. (Default: log = FALSE)
+                  nahead = 1,
+                  ctr = list(
+                    nsim = 1e4L    # number of simulations
+                  ))
+
+alpha <- c(0.01, 0.05)
+VaR.x <- Risk(model, alpha = alpha, nahead = 1)$VaR
+plotLik <- ggplot() +
+  geom_line(aes(x = mesh, y = pred.x), size = 0.6) + 
+  geom_vline(xintercept = VaR.x[2], color = 'blue', size = 0.9) + 
+  geom_label(aes(label = paste0('alpha = ', alpha[2])),  
+             x = VaR.x[2], 
+             y = max(pred.x) * 0.95,
+             label.padding = unit(0.25, 'lines'), # rectangle size around the label
+             color = 'blue') + 
+  geom_vline(xintercept = VaR.x[1], color = 'red', size = 0.9) + 
+  geom_label(aes(label = paste0('alpha = ', alpha[1])),  
+             x = VaR.x[1], 
+             y = max(pred.x) * 0.8, 
+             label.padding = unit(0.25, 'lines'), # rectangle size around the label
+             color = 'red') + 
+  labs(title = paste('Value at Risk -', cnames[2]), subtitle = 'forecast 1 day ahead', 
+       x = '', y = 'Liklihood') + 
+  scale_x_continuous(breaks = round(c(VaR.x), 2), minor_breaks = round(seq(min(mesh), max(mesh), .5), 2)) + 
+  theme_minimal()
+plotCum <- ggplot() +
+  geom_line(aes(x = mesh, y = cumsum(pred.x)), size = 0.6) + 
+  geom_vline(xintercept = VaR.x[2], color = 'blue', size = 0.9) + 
+  geom_hline(yintercept = 5, color = 'blue', size = 0.4, linetype = 'dashed', alpha = 0.9) + 
+  geom_vline(xintercept = VaR.x[1], color = 'red', size = 0.9) + 
+  geom_hline(yintercept = 1, color = 'red', size = 0.4, linetype = 'dashed', alpha = 0.9) + 
+  labs(x = 'Conditional Volatility', y = 'Probability') + 
+  scale_x_continuous(breaks = round(seq(min(mesh), max(mesh), 1), 2)) + 
+  scale_y_continuous(breaks = seq(0, 100, 25), minor_breaks = seq(5, 95, 5)) +
+  theme_minimal()
+do.call(plot_grid, c(list(plotLik, plotCum), nrow = 2, align = 'v'))
