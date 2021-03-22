@@ -500,6 +500,12 @@ for (i in seq(2, 7)){
 }
 
 #####  ALTRE ASSUNZIONI
+#Plot the HIST of each che in realtà ho fatto su Phyton ma volendo le faccio con R poi ve le mostro
+hist(SP500)
+hist(NASDAQ)
+hist(FTSE)
+hist(DAC)
+hist(CAC)                           
 # Conditional Mean respect itself = 0 is confirmed 
 attach(StockReturns)
 acf(SP500)
