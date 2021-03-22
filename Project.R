@@ -498,3 +498,65 @@ for (i in seq(2, 7)){
   do.report(best.models$AIC$model[[i - 1]], StockReturns, i, saveImages = list(logic = T, directory = 
             paste0(getwd(), '/Images'), extension = 'png'), crises = crises)
 }
+
+#####  ALTRE ASSUNZIONI
+# Conditional Mean respect itself = 0 is confirmed 
+attach(StockReturns)
+acf(SP500)
+acf(NASDAQ)
+acf(FTSE)
+acf(DAC)
+acf(CAC)                         
+                           
+                           
+####### SEMI HIDDEN MARKOV MODEL PARTENDO DA KMEANS
+initialization <- kmeans(StockReturns[,2:6],2)
+initialization
+kmeans.means <- initialization$centers
+plot(StockReturns[,2:6],col=initialization$cluster)
+sigma1 <- cov(StockReturns[initialization$cluster==1,2:6]) #in the first state
+sigma2 <- cov(StockReturns[initialization$cluster==2,2:6]) #in the second state
+sigma1
+sigma2
+
+?hsmmspec
+
+K <- 2
+start.val <- hsmmspec(init = c(1,0), #hsmmspec instead of hmmspec, we use semimarkov
+                      trans = matrix(c(0,1,1,0),byrow=T, nrow = K, ncol = K), #we have to fix the entry on the main diagonal equal to 0 because the sojourn distribution is shaped according a poisson
+                      parms.emis = list(mu = list(kmeans.means[1,],kmeans.means[2,]), 
+                                        sigma=list(sigma1,sigma2)),
+                      sojourn = list(lambda = c(10,20),shift = c(1,1),type="poisson"), #is shifted by 1 because the poisson start from 1 usually(and you can't stay in a state 0 time)
+                      dens.emission = dmvnorm.hsmm)
+start.val
+
+mod.hsmm.k2 <- hsmmfit(matrix(unlist(StockReturns[,2:6]),ncol=5),
+                       start.val, mstep=mstep.mvnorm )#multivariate norm
+
+View(mod.hsmm.k2)
+AIC(mod.hsmm.k2)
+
+mod.hsmm.k2$loglik 
+mod.hsmm.k2$model$transition
+mod.hmm.k2$model$parms.emission
+mod.hsmm.k2$model$sojourn
+
+par(mfrow=c(2,2))
+plot(StockReturns[,2],col=mod.hmm.k2$yhat)
+plot(StockReturns[,3],col=mod.hmm.k2$yhat)
+plot(StockReturns[,4],col=mod.hmm.k2$yhat)
+plot(StockReturns[,5],col=mod.hmm.k2$yhat)
+plot(StockReturns[,6],col=mod.hmm.k2$yhat)
+
+mod.hmm.k2$model$parms.emission$mu
+mod.hmm.k2$model$parms.emission$sigma
+
+cov2cor(mod.hmm.k2$model$parms.emission$sigma[[1]])
+cov2cor(mod.hmm.k2$model$parms.emission$sigma[[2]])
+
+
+
+                            
+                         
+                            
+                           
